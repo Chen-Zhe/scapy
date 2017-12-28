@@ -449,7 +449,7 @@ debug_tls:When 1, print some TLS session secrets when they are computed.
     load_layers = ["l2", "inet", "dhcp", "dns", "dot11", "gprs",
                    "hsrp", "inet6", "ir", "isakmp", "l2tp", "mgcp",
                    "mobileip", "netbios", "netflow", "ntp", "ppp", "pptp",
-                   "radius", "rip", "rtp", "skinny", "smb", "snmp",
+                   "radius", "rip", "rtp", "ssl_tls", "skinny", "smb", "snmp",
                    "tftp", "x509", "bluetooth", "dhcp6", "llmnr",
                    "sctp", "vrrp", "ipsec", "lltd", "vxlan", "eap"]
     contribs = dict()
