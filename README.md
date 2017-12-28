@@ -1,4 +1,4 @@
-# Scapy with SSL/TLS support#
+# Scapy with SSL/TLS support #
 
 Hand integrated from [Scapy](https://github.com/secdev/scapy/) and [scapy-ssl_tls](https://github.com/tintinweb/scapy-ssl_tls) using the latest versions as of today (Dec 28, 2017). Works only on Python 3 (change one line's `.items()` to `.iteritems()` should help to run in Python 2)
 
