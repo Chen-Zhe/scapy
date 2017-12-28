@@ -8,11 +8,13 @@ from scapy.layers.inet import TCP, UDP
 from scapy.layers import x509
 
 
-import ssl_tls_registry as registry
+import scapy.layers.ssl_tls_registry as registry
 
 
 class BLenField(LenField):
-
+    
+    __slots__ = ["adjust_i2m", "numbytes", "length_of", "count_of", "adjust_m2i"]
+    
     def __init__(
             self,
             name,
@@ -52,7 +54,7 @@ class BLenField(LenField):
         """Extract an internal value from a string"""
         upack_data = s[:self.sz]
         # prepend struct.calcsize()-len(data) bytes to satisfy struct.unpack
-        upack_data = '\x00' * (struct.calcsize(self.fmt) - self.sz) + upack_data
+        upack_data = b'\x00' * (struct.calcsize(self.fmt) - self.sz) + upack_data
         return s[self.sz:], self.m2i(pkt, struct.unpack(self.fmt, upack_data)[0])
 
     def i2m(self, pkt, x):
@@ -90,7 +92,9 @@ class XFieldLenField(FieldLenField):
 
 
 class BEnumField(EnumField):
-
+    
+    __slots__ = ["numbytes"]
+    
     def __init__(self, name, default, enum, fmt="!I", numbytes=None):
         EnumField.__init__(self, name, default, enum, fmt)
         self.numbytes = numbytes
@@ -191,6 +195,8 @@ class PacketLengthFieldPayload(Packet):
 class StackedLenPacket(Packet):
     """ Allows stacked packets. Tries to chop layers by layer.length
     """
+    __slots__ = ["tls_ctx"]
+    
     def __init__(self, *args, **fields):
         self.tls_ctx = fields.pop("ctx", None)
         Packet.__init__(self, *args, **fields)
@@ -198,6 +204,7 @@ class StackedLenPacket(Packet):
     def do_dissect_payload(self, s):
         # prototype for this layer. only layers of same type can be stacked
         cls = self.guess_payload_class(s)
+        
         cls_header_len = len(cls())
         # dissect potentially stacked sublayers.
         while len(s):
@@ -224,10 +231,13 @@ class TypedPacketListField(PacketListField):
     This is specifically used to handle the Key Share extension in TLS 1.3, where the parsing semantics
     change depending on which handshake packet type has defined the Key Share.
     """
+    
+    __slots__ = ["type_"]
+    
     def __init__(self, name, default, cls, count_from=None, length_from=None, type_=None):
-        self.type_ = type_
         PacketListField.__init__(self, name, default, cls, count_from=None, length_from=None)
-
+        self.type_ = type_
+    
     def m2i(self, pkt, m):
         return self.cls(m, type_=self.type_)
 
@@ -235,7 +245,8 @@ class TypedPacketListField(PacketListField):
 class EnumStruct(object):
 
     def __init__(self, entries):
-        entries = dict((v.replace(' ', '_').upper(), k) for k, v in entries.iteritems())
+        #original: entries.iteritems()
+        entries = dict((v.replace(' ', '_').upper(), k) for k, v in entries.items())
         self.__dict__.update(entries)
 
 TLS_VERSIONS = {
@@ -260,9 +271,6 @@ TLS_CONTENT_TYPES = registry.TLS_CONTENTTYPE_REGISTRY
 TLSContentType = EnumStruct(TLS_CONTENT_TYPES)
 
 TLS_HANDSHAKE_TYPES = registry.TLS_HANDSHAKETYPE_REGISTRY
-TLS_HANDSHAKE_TYPES.update({0x6: "hello_retry_request",
-                            0x8: "encrypted_extensions",
-                            0x18: "key_update"})
 TLSHandshakeType = EnumStruct(TLS_HANDSHAKE_TYPES)
 
 TLS_EXTENSION_TYPES = registry.EXTENSIONTYPE_VALUES
@@ -284,9 +292,6 @@ TLS_ALERT_LEVELS = {
 TLSAlertLevel = EnumStruct(TLS_ALERT_LEVELS)
 
 TLS_ALERT_DESCRIPTIONS = registry.TLS_ALERT_REGISTRY
-TLS_ALERT_DESCRIPTIONS.update({1: "end_of_early_data",
-                               109: "missing_extension",
-                               116: "certificate_required"})
 TLSAlertDescription = EnumStruct(TLS_ALERT_DESCRIPTIONS)
 
 TLS_EXT_MAX_FRAGMENT_LENGTH_ENUM = {
@@ -298,20 +303,6 @@ TLS_EXT_MAX_FRAGMENT_LENGTH_ENUM = {
 }
 
 TLS_CIPHER_SUITES = registry.TLS_CIPHER_SUITE_REGISTRY
-# adding missing ciphers
-TLS_CIPHER_SUITES.update({
-    0x0060: 'RSA_EXPORT1024_WITH_RC4_56_MD5',
-    0x0061: 'RSA_EXPORT1024_WITH_RC2_CBC_56_MD5',
-    0x0062: 'RSA_EXPORT1024_WITH_DES_CBC_SHA',
-    0x0063: 'DHE_DSS_EXPORT1024_WITH_DES_CBC_SHA',
-    0x0064: 'RSA_EXPORT1024_WITH_RC4_56_SHA',
-    0x0065: 'DHE_DSS_EXPORT1024_WITH_RC4_56_SHA',
-    0x0066: 'DHE_DSS_WITH_RC4_128_SHA',
-    0x1301: 'TLS_AES_128_GCM_SHA256',
-    0x1302: 'TLS_AES_256_GCM_SHA384',
-    0x1303: 'TLS_CHACHA20_POLY1305_SHA256',
-    0x1304: 'TLS_AES_128_CCM_SHA256',
-    0x1305: 'TLS_AES_128_CCM_8_SHA256'})
 TLSCipherSuite = EnumStruct(TLS_CIPHER_SUITES)
 
 TLS_COMPRESSION_METHODS = registry.TLS_COMPRESSION_METHOD_IDENTIFIERS
@@ -346,11 +337,6 @@ TLS_EC_CURVE_TYPES = registry.EC_CURVE_TYPE_REGISTRY
 TLSECCurveTypes = EnumStruct(TLS_EC_CURVE_TYPES)
 
 TLS_SUPPORTED_GROUPS = registry.SUPPORTED_GROUPS_REGISTRY
-TLS_SUPPORTED_GROUPS.update({256: "ffdhe2048",
-                             257: "ffdhe3072",
-                             258: "ffdhe4096",
-                             259: "ffdhe6144",
-                             260: "ffdhe8192"})
 TLSSupportedGroup = EnumStruct(TLS_SUPPORTED_GROUPS)
 DEFAULT_NAMED_GROUP_LIST = [TLSSupportedGroup.SECP256R1, TLSSupportedGroup.SECP384R1, TLSSupportedGroup.SECP521R1]
 
@@ -397,10 +383,9 @@ DEFAULT_SIG_SCHEME_LIST = [TLSSignatureScheme.ECDSA_SECP521R1_SHA512,
                            TLSSignatureScheme.RSA_PKCS1_SHA1]
 
 
-TLS_PSK_KEY_EXCHANGE_MODE = {}
-TLS_PSK_KEY_EXCHANGE_MODE.update({0: "psk_ke",
-                                  1: "psk_dhe_ke",
-                                  255: "reserved"})
+TLS_PSK_KEY_EXCHANGE_MODE = {0: "psk_ke",
+                            1: "psk_dhe_ke",
+                            255: "reserved"}
 TLSPSKKeyExchangeMode = EnumStruct(TLS_PSK_KEY_EXCHANGE_MODE)
 
 TLS_CERTIFICATE_STATUS_TYPES = registry.TLS_CERTIFICATE_STATUS_TYPES
@@ -418,6 +403,9 @@ class TLSFragmentationError(Exception):
 
 
 class TLSRecord(StackedLenPacket):
+    
+    __slots__ = ["fragments"]
+    
     MAX_LEN = 2**16 - 1
     name = "TLS Record"
     fields_desc = [ByteEnumField("content_type", TLSContentType.APPLICATION_DATA, TLS_CONTENT_TYPES),
@@ -485,6 +473,9 @@ class TLSExtALPN(PacketNoPayload):
 
 
 class TLSExtension(PacketLengthFieldPayload):
+    
+    __slots__ = ["type_"]
+    
     name = "TLS Extension"
     fields_desc = [XShortEnumField("type", TLSExtensionType.SERVER_NAME, TLS_EXTENSION_TYPES),
                    XLenField("length", None, fmt="!H")]
@@ -757,6 +748,8 @@ class TLSHeartBeat(PacketNoPayload):
 
 
 class TLSKeyExchange(Packet):
+    __slots__ = ["tls_ctx"]
+    
     def __init__(self, *args, **fields):
         # Unneeded, left for backwards compat
         self.tls_ctx = fields.pop("ctx", None)
@@ -861,7 +854,7 @@ class TLSServerHelloDone(PacketNoPayload):
 class TLSCertificate(PacketNoPayload):
     name = "TLS Certificate"
     fields_desc = [XBLenField("length", None, length_of="data", fmt="!I", numbytes=3),
-                   PacketLenField("data", None, x509.X509Cert, length_from=lambda x:x.length)]
+                   PacketLenField("data", None, x509.X509_Cert, length_from=lambda x:x.length)]
 
 
 class TLS10Certificate(PacketNoPayload):
@@ -873,7 +866,7 @@ class TLS10Certificate(PacketNoPayload):
 class TLSCertificateEntry(PacketNoPayload):
     name = "TLS Certificate Entry"
     fields_desc = [XBLenField("length", None, length_of="cert_data", fmt="!I", numbytes=3),
-                   PacketLenField("cert_data", None, x509.X509Cert, length_from=lambda x: x.length),
+                   PacketLenField("cert_data", None, x509.X509_Cert, length_from=lambda x: x.length),
                    XFieldLenField("extensions_length", None, length_of="extensions", fmt="H"),
                    PacketListField("extensions", None, TLSExtension, length_from=lambda x: x.extensions_length)]
 
@@ -924,7 +917,8 @@ class TLSCertificateType(PacketNoPayload):
 class TLSCADistinguishedName(PacketNoPayload):
     name = "TLS CA Distinguished Name"
     fields_desc = [XFieldLenField("length", None, length_of="dn", fmt="H"),
-                   PacketLenField("ca_dn", None, x509.X509v3Ext, length_from=lambda x:x.length)]
+                   #original line: PacketLenField("ca_dn", None, x509.X509v3Ext, length_from=lambda x:x.length)]
+                   PacketLenField("ca_dn", None, x509.X509_Cert, length_from=lambda x:x.length)]
 
 
 class TLSCertificateRequest(Packet):
@@ -939,6 +933,8 @@ class TLSCertificateRequest(Packet):
 
 
 class TLSDecryptablePacket(PacketLengthFieldPayload):
+    
+    __slots__ = ["tls_ctx"]
 
     explicit_iv_field = StrField("explicit_iv", "", fmt="H")
     mac_field = StrField("mac", "", fmt="H")
@@ -1043,6 +1039,8 @@ class TLSDecryptablePacket(PacketLengthFieldPayload):
 
 
 class TLSHandshake(PacketLengthFieldPayload):
+    __slots__ = ["tls_ctx"]
+    
     name = "TLS Handshake"
     fields_desc = [ByteEnumField("type", TLSHandshakeType.CLIENT_HELLO, TLS_HANDSHAKE_TYPES),
                    XBLenField("length", None, fmt="!I", numbytes=3)]
@@ -1302,17 +1300,20 @@ class TLSSocket(object):
 
 
 # entry class
-class SSL(Packet):
+class SSL(Packet):    
     """
     COMPOUND CLASS for SSL
     """
+    __slots__ = ["tls_ctx", "_origin", "guessed_next_layer"]
     name = "SSL/TLS"
     fields_desc = [PacketListField("records", None, TLSRecord)]
+    
     CONTENT_TYPE_MAP = {0x15: TLSAlert, 0x16: TLSHandshakes, 0x17: TLSPlaintext}
 
     def __init__(self, *args, **fields):
         self.tls_ctx = fields.pop("ctx", None)
         self._origin = fields.pop("_origin", None)
+        
         Packet.__init__(self, *args, **fields)
 
     @classmethod
@@ -1324,11 +1325,12 @@ class SSL(Packet):
         # figure out if we're UDP or TCP
         if self.underlayer is not None and self.underlayer.haslayer(UDP):
             self.guessed_next_layer = DTLSRecord
-        elif ord(raw_bytes[0]) & 0x80:
+        #elif ord(raw_bytes[0]) & 0x80:
+        elif raw_bytes[0] & 0x80:
             self.guessed_next_layer = SSLv2Record
         else:
             self.guessed_next_layer = TLSRecord
-        self.fields_desc = [PacketListField("records", None, self.guessed_next_layer)]
+        #self.fields_desc = [PacketListField("records", None, self.guessed_next_layer)]
         return raw_bytes
 
     def do_dissect(self, raw_bytes):

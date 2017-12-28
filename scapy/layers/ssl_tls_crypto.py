@@ -13,9 +13,9 @@ import warnings
 
 import math
 
-import pkcs7
-import ssl_tls as tls
-import ssl_tls_keystore as tlsk
+import scapy.layers.pkcs7
+import scapy.layers.ssl_tls as tls
+import scapy.layers.ssl_tls_keystore as tlsk
 import tinyec.ec as ec
 import tinyec.registry as ec_reg
 
